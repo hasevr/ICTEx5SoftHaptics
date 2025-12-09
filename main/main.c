@@ -59,11 +59,11 @@ struct WaveParam{
     .nFreq = sizeof(wave.freq)/sizeof(wave.freq[0]),
     .amplitude = 1.5,
 };  
-int count = 0;
-#define NWAVE 10
-double time[NWAVE];
-int waveRun = -1;
-int thresholds[NWAVE];
+int count = 0;  //  counter for status output
+
+#define NWAVE 10        //  Number of waves to display.
+double time[NWAVE];     //  time from the start of each wave.
+int thresholds[NWAVE];  //  Threshold offset for each wave (ADC's value - thresBase) 
 
 void initWave(){
     for(int w=0; w<NWAVE; ++w){
@@ -72,19 +72,22 @@ void initWave(){
     }
 }
 
+//  Haptic func. Called every DT sec.
 void hapticFunc(void* arg){
     const char* TAG = "H_FUNC";
-    static int waveForm;        //  An integer to select waveform. 
-    static double omega = 0;    //  angular frequency
-    static double B=0;          //  damping coefficient
-    int ad=0;
+    static int waveForm;        //  current waveform number (freq and damp). 
+    static double omega = 0;    //  current angular frequency
+    static double B=0;          //  current damping coefficient
+    int ad=0;                   //  ADC's value
     adc_oneshot_read(adc1_handle, ADC_CHANNEL_6, &ad);
-    const int thresBase = 1900;
+
+    const int thresBase = 1900; //  ADC value when not touched.
+
     if (ad < thresBase && time[0] > 0.3){   //  Stop when the user releases the button. 
         initWave();
         printf("\r\n");
     }
-    if (ad > thresBase + thresholds[0] && time[0] == -1){   //  Set waveform
+    if (ad > thresBase + thresholds[0] && time[0] == -1){   //  Set waveform when threshold 0 is triggered.
         omega = wave.freq[waveForm % wave.nFreq] * M_PI * 2;
         B = wave.damp[waveForm / wave.nFreq];
         printf("Wave: %3.1fHz, A=%2.2f, B=%3.1f ", omega/(M_PI*2), wave.amplitude, B);
@@ -92,7 +95,7 @@ void hapticFunc(void* arg){
         if (waveForm >= wave.nFreq * wave.nDamp) waveForm = 0;
     }
 
-    //  Check threshold and start wave
+    //  Check thresholds and start and stop waves
     int nWaveRun = 0;
     for(int w=0; w < NWAVE; ++ w){
         if (time[w] >= 0){
@@ -103,8 +106,9 @@ void hapticFunc(void* arg){
             time[w] = 0;
             nWaveRun ++;
         }
-        if (time[w] > 0.5) time[w] = -1;
+        if (time[w] > 0.5) time[w] = -1;    //  Stop after 0.5 sec
     }
+
     //  Output the wave
     double pwm = 0; //  sum waves
     for(int w=0; w < NWAVE; ++w){
@@ -113,7 +117,7 @@ void hapticFunc(void* arg){
         }
     }
 
-    //  Rotating direction
+    // Set motor rotation direction
     if (pwm == 0){
         if (nWaveRun > 0) printf(".");
     }else if (pwm > 0){
@@ -125,7 +129,8 @@ void hapticFunc(void* arg){
         if (nWaveRun > 0) printf("-");
     }
     if (pwm > 1) pwm = 1;
-    //  Set pwm duty rate
+
+    //  Set pwm duty rate (motor power)
     unsigned int speed = pwm * BDC_MCPWM_DUTY_TICK_MAX;
     bdc_motor_set_speed(motor, speed);
     count ++;
